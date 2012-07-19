@@ -1,12 +1,8 @@
 #!/usr/bin/env python
 
-import os
 import pickle
-import platform
 import re
 import struct
-import subprocess
-import sys
 import time
 from optparse import OptionParser
 from socket import socket
@@ -20,6 +16,7 @@ over to the target Graphite installation.
 
 Well, for now reads only interfaces counters.
 """
+
 
 def main():
     # process options and arguments
@@ -41,13 +38,13 @@ def main():
         parser.error("you must specify target_host and carbon_host as a command line option!")
 
     # assign some sane variable names to command line arguments
-    carbon_host = args[1] # carbon server hostname
-    target_host = args[0] # carbon server hostname
+    carbon_host = args[1]  # carbon server hostname
+    target_host = args[0]  # carbon server hostname
 
     # try to establish connection with carbon server
     sock = socket()
     try:
-        sock.connect((carbon_host,options.port))
+        sock.connect((carbon_host, options.port))
     except:
         print("Couldn't connect to %s on port %d, is carbon-agent.py running?"
               % (carbon_host, options.port))
@@ -59,34 +56,34 @@ def main():
     errorIndication, errorStatus, errorIndex, sysName = cmdgen.CommandGenerator().nextCmd(
             cmdgen.CommunityData('agent', options.community, 0),
             cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1,3,6,1,2,1,1,5))
+            (1, 3, 6, 1, 2, 1, 1, 5))
 
     errorIndication, errorStatus, errorIndex, ifIndex = cmdgen.CommandGenerator().nextCmd(
             cmdgen.CommunityData('agent', options.community, 0),
             cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1,3,6,1,2,1,2,2,1,1))
+            (1, 3, 6, 1, 2, 1, 2, 2, 1, 1))
 
     errorIndication, errorStatus, errorIndex, ifDescr = cmdgen.CommandGenerator().nextCmd(
             cmdgen.CommunityData('agent', options.community, 0),
             cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1,3,6,1,2,1,31,1,1,1,1))
+            (1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 1))
 
     errorIndication, errorStatus, errorIndex, ifInOctets = cmdgen.CommandGenerator().nextCmd(
             cmdgen.CommunityData('agent', options.community, 0),
             cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1,3,6,1,2,1,2,2,1,10))
+            (1, 3, 6, 1, 2, 1, 2, 2, 1, 10))
 
     errorIndication, errorStatus, errorIndex, ifOutOctets = cmdgen.CommandGenerator().nextCmd(
             cmdgen.CommunityData('agent', options.community, 0),
             cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1,3,6,1,2,1,2,2,1,16))
+            (1, 3, 6, 1, 2, 1, 2, 2, 1, 16))
 
     errorIndication, errorStatus, errorIndex, cpmCPUTotal1min = cmdgen.CommandGenerator().nextCmd(
             cmdgen.CommunityData('agent', options.community, 0),
             cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1,3,6,1,4,1,9,9,109,1,1,1,1,4))
+            (1, 3, 6, 1, 4, 1, 9, 9, 109, 1, 1, 1, 1, 4))
 
-    hostname = re.search(r'^([a-zA-Z0-9-]+).*', str(sysName[0][0][1])).group(1) # assigns and strips out the hostname
+    hostname = re.search(r'^([a-zA-Z0-9-]+).*', str(sysName[0][0][1])).group(1)  # assigns and strips out the hostname
 
     # assumes all the results from SNMP are in right (the same) order
     interfaces = zip(ifIndex, ifDescr, ifInOctets, ifOutOctets)
@@ -94,17 +91,17 @@ def main():
     for row in interfaces:
         data.append(("servers.%s.%s_traffic_in" % (
             hostname,
-            str(row[1][0][1]).replace('/', '_')), # interface name; change / into _ to help grahite tree organisation
+            str(row[1][0][1]).replace('/', '_')),  # interface name; change / into _ to help grahite tree organisation
             (
                 timestamp,
-                int(row[2][0][1]) # traffic IN
+                int(row[2][0][1])  # traffic IN
             )))
         data.append(("servers.%s.%s_traffic_out" % (
             hostname,
             str(row[1][0][1]).replace('/', '_')),
             (
                 timestamp,
-                int(row[3][0][1]) # traffic OUT
+                int(row[3][0][1])  # traffic OUT
             )))
 
     # cpu usage
@@ -112,7 +109,7 @@ def main():
         hostname),
         (
             timestamp,
-            int(cpmCPUTotal1min[0][0][1]) # cpmCPUTotal1min
+            int(cpmCPUTotal1min[0][0][1])  # cpmCPUTotal1min
         )))
 
     # send gathered data to carbon server as a pickle packet
