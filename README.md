@@ -2,8 +2,8 @@ ciscoasa2graphite
 =================
 
 Yet another graphite feed, this time it gets (interesting, for now just
-interface stats) SNMP data from Cisco ASA and ships them over to target
-Graphite installation.
+interface stats and CPU usage) SNMP data from Cisco ASA and ships them over to
+target Graphite installation.
 
 Requires pysnmp.  Best to be run from cron.
 

@@ -81,6 +81,11 @@ def main():
             cmdgen.UdpTransportTarget((target_host, options.snmpport)),
             (1,3,6,1,2,1,2,2,1,16))
 
+    errorIndication, errorStatus, errorIndex, cpmCPUTotal1min = cmdgen.CommandGenerator().nextCmd(
+            cmdgen.CommunityData('agent', options.community, 0),
+            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
+            (1,3,6,1,4,1,9,9,109,1,1,1,1,4))
+
     hostname = re.search(r'^([a-zA-Z0-9-]+).*', str(sysName[0][0][1])).group(1) # assigns and strips out the hostname
 
     # assumes all the results from SNMP are in right (the same) order
@@ -101,6 +106,14 @@ def main():
                 timestamp,
                 int(row[3][0][1]) # traffic OUT
             )))
+
+    # cpu usage
+    data.append(("servers.%s.cpmCPUTotal1min" % (
+        hostname),
+        (
+            timestamp,
+            int(cpmCPUTotal1min[0][0][1]) # cpmCPUTotal1min
+        )))
 
     # send gathered data to carbon server as a pickle packet
     payload = pickle.dumps(data)
