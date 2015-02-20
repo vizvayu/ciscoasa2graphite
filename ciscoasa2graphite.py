@@ -4,6 +4,7 @@ import pickle
 import re
 import struct
 import time
+import pprint
 from optparse import OptionParser
 from socket import socket
 from pysnmp.entity.rfc3413.oneliner import cmdgen
@@ -38,473 +39,205 @@ def main():
     parser.add_option("-g", "--custom-group-name", dest="custom_group_name",
         help="custom group name to show in Graphite",
         action="store", default="servers")
+    parser.add_option("-o", "--single", dest="single",
+        help="run a single time and exit",
+        action="store_true", default=False)
+    parser.add_option("-d", "--delay", dest="delay",
+        help="wait <delay> seconds between each connection",
+        action="store", default=30)
+    parser.add_option("", "--debug", dest="debug",
+        help="do not send any data to Graphite, print the data to the screen instead",
+        action="store_true", default=False)
 
     (options, args) = parser.parse_args()
     if len(args) != 2:
-        parser.error("you must specify target_host and carbon_host as a command line option!")
+        parser.error("You must specify target_host and carbon_host")
 
     # assign some sane variable names to command line arguments
     carbon_host = args[1]  # carbon server hostname
     target_host = args[0]  # carbon server hostname
 
-    # try to establish connection with carbon server
-    sock = socket()
-    try:
-        sock.connect((carbon_host, options.port))
-    except:
-        print("Couldn't connect to %s on port %d, is carbon-agent.py running?"
-              % (carbon_host, options.port))
+    oldOctetsIn = [0 for i in range(30)]
+    oldOctetsOut = [0 for i in range(30)]
+    
+    while True:
+        # try to establish connection with carbon server
+        sock = socket()
+        try:
+            sock.connect((carbon_host, options.port))
+        except:
+            print("Couldn't connect to %s on port %d, is carbon-agent.py running?"
+                  % (carbon_host, options.port))
 
-    data = []
-    timestamp = int(time.time())
+        data = []
+        timestamp = int(time.time())
 
-    # TODO: fetch all the relevant data in one go and organise in a different way
-    errorIndication, errorStatus, errorIndex, sysName = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 1, 5))
+        snmpDescInt = (
+            '',								# 0 ifDescr
+            'octets_in',					# 1 ifInOctets
+            'octets_out',					# 2 ifOutOctets
+            'discarded_in',					# 3 ifInDiscarded
+            'discarded_out',				# 4 ifOutDiscarded
+            'errors_in',					# 5 ifInError
+            'errors_out',					# 6 ifOutError
+        )
+        
+        snmpDescConn = (
+            'conn_active',					# 0 connActive
+            'conn_rate_1min',	            # 1 connRate1m
+            'conn_rate_5min',           	# 2 connRate5m
+        
+        )
 
-    errorIndication, errorStatus, errorIndex, ifIndex = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 2, 2, 1, 1))
+        snmpDesc = (
+            '',								# 0 sysName
+            'cpu_total_1min',	            # 1 cpmCPUTotal1min
+            'ram_used', 				    # 2 ramUsed
+            'ram_free',	    			    # 3 ramFree
+            'snmp_traffic_in',			    # 4 snmpInOctets
+            'snmp_traffic_out',			    # 5 snmpOutOctets
+            'snmp_bad_version',			    # 6 snmpBadVersion
+            'snmp_bad_community_name',	    # 7 snmpBadCommunityName
+            'snmp_bad_community_use', 	    # 8 snmpBadCommunityUse
+            'ike_active_tunnels',		    # 9 ikeActiveTunnels
+            'ike_global_traffic_in',	    # 10 ikeGlobalInOctets
+            'ike_global_drops_in',		    # 11 ikeGlobalInDrops
+            'ike_global_traffic_out',	    # 12 ikeGlobalOutOctets
+            'ike_global_drops_out',		    # 13 ikeGlobalOutDrops
+            'ike_global_auth_fails',	    # 14 ikeGlobalAuthFails
+            'ipsec_active_tunnels',		    # 15 ipsecActiveTunnels
+            'ipsec_global_traffic_in',		# 16 ipsecGlobalInOctets
+            'ipsec_global_drops_in',		# 17 ipsecGlobalInDrops
+            'ipsec_global_auth_fails_in',	# 18 ipsecGlobalInAuthFails
+            'ipsec_global_traffic_out',		# 19 ipsecGlobalOutOctets
+            'ipsec_global_drops_out',	    # 20 ipsecGlobalOutDrops
+            'ipsec_global_auth_fails_out',	# 21 ipsecGlobalOutAuthFails
+        )
 
-    errorIndication, errorStatus, errorIndex, ifDescr = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 1))
+        errorIndication, errorStatus, errorIndex, snmpDataInt = cmdgen.CommandGenerator().nextCmd(
+                cmdgen.CommunityData('agent', options.community, 0),
+                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=3),
+                (1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 1),             # 0 ifDescr
+                (1, 3, 6, 1, 2, 1, 2, 2, 1, 10),                # 1 ifInOctets
+                (1, 3, 6, 1, 2, 1, 2, 2, 1, 16),                # 2 ifOutOctets
+                (1, 3, 6, 1, 2, 1, 2, 2, 1, 13),                # 3 ifInDiscarded
+                (1, 3, 6, 1, 2, 1, 2, 2, 1, 19),                # 4 ifOutDiscarded
+                (1, 3, 6, 1, 2, 1, 2, 2, 1, 14),                # 5 ifInError
+                (1, 3, 6, 1, 2, 1, 2, 2, 1, 20),                # 6 ifOutError
+            )
 
-    errorIndication, errorStatus, errorIndex, ifInOctets = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 2, 2, 1, 10))
+        errorIndication, errorStatus, errorIndex, snmpDataConn = cmdgen.CommandGenerator().nextCmd(
+                cmdgen.CommunityData('agent', options.community, 0),
+                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=3),
+                (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 6),      # 0 connActive
+                (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 10),     # 1 connRate1m
+                (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 11),     # 2 connRate5m
+            )
 
-    errorIndication, errorStatus, errorIndex, ifOutOctets = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 2, 2, 1, 16))
+        errorIndication, errorStatus, errorIndex, snmpData = cmdgen.CommandGenerator().nextCmd(
+                cmdgen.CommunityData('agent', options.community, 0),
+                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=3),
+                (1, 3, 6, 1, 2, 1, 1, 5),                       # 0 sysName
+                (1, 3, 6, 1, 4, 1, 9, 9, 109, 1, 1, 1, 1, 4),   # 1 cpmCPUTotal1min
+                (1, 3, 6, 1, 4, 1, 9, 9, 48, 1, 1, 1, 5),       # 2 ramUsed
+                (1, 3, 6, 1, 4, 1, 9, 9, 48, 1, 1, 1, 6),       # 3 ramFree
+                (1, 3, 6, 1, 2, 1, 11, 1),                      # 4 snmpInOctets
+                (1, 3, 6, 1, 2, 1, 11, 2),                      # 5 snmpOutOctets
+                (1, 3, 6, 1, 2, 1, 11, 3),                      # 6 snmpBadVersion
+                (1, 3, 6, 1, 2, 1, 11, 4),                      # 7 snmpBadCommunityName
+                (1, 3, 6, 1, 2, 1, 11, 5),                      # 8 snmpBadCommunityUse
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 1),      # 9 ikeActiveTunnels
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 3),      # 10 ikeGlobalInOctets
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 5),      # 11 ikeGlobalInDrops
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 11),     # 12 ikeGlobalOutOctets
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 13),     # 13 ikeGlobalOutDrops
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 23),     # 14 ikeGlobalAuthFails
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 1),      # 15 ipsecActiveTunnels
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 3),      # 16 ipsecGlobalInOctets
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 10),     # 17 ipsecGlobalInDrops
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 13),     # 18 ipsecGlobalInAuthFails
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 16),     # 19 ipsecGlobalOutOctets
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 23),     # 20 ipsecGlobalOutDrops
+                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 25),     # 21 ipsecGlobalOutAuthFails
+            )
 
-    errorIndication, errorStatus, errorIndex, ifInDiscarded = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 2, 2, 1, 13))
+        if options.custom_host_name:
+          hostname = options.custom_host_name
+        else:
+          hostname = re.search(r'^([a-zA-Z0-9-]+).*', str(snmpData[0][0][1])).group(1)  # assigns and strips out the hostname
 
-    errorIndication, errorStatus, errorIndex, ifOutDiscarded = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 2, 2, 1, 19))
-
-    errorIndication, errorStatus, errorIndex, ifInError = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 2, 2, 1, 14))
-
-    errorIndication, errorStatus, errorIndex, ifOutError = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 2, 2, 1, 20))
-
-    errorIndication, errorStatus, errorIndex, cpmCPUTotal1min = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 109, 1, 1, 1, 1, 4))
-
-    errorIndication, errorStatus, errorIndex, ramUsed = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 48, 1, 1, 1, 5))
-
-    errorIndication, errorStatus, errorIndex, ramFree = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 48, 1, 1, 1, 6))
-
-    errorIndication, errorStatus, errorIndex, snmpInOctets = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 11, 1))
-
-    errorIndication, errorStatus, errorIndex, snmpOutOctets = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 11, 2))
-
-    errorIndication, errorStatus, errorIndex, snmpBadVersion = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 11, 3))
-
-    errorIndication, errorStatus, errorIndex, snmpBadCommunityName = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 11, 4))
-
-    errorIndication, errorStatus, errorIndex, snmpBadCommunityUse = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 2, 1, 11, 5))
-
-    errorIndication, errorStatus, errorIndex, ikeActiveTunnels = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 1))
-
-    errorIndication, errorStatus, errorIndex, ikeGlobalInOctets = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 3))
-
-    errorIndication, errorStatus, errorIndex, ikeGlobalInDrops = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 5))
-
-    errorIndication, errorStatus, errorIndex, ikeGlobalOutOctets = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 11))
-
-    errorIndication, errorStatus, errorIndex, ikeGlobalOutDrops = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 13))
-
-    errorIndication, errorStatus, errorIndex, ikeGlobalAuthFails = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 2, 1, 23))
-
-    errorIndication, errorStatus, errorIndex, ipsecActiveTunnels = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 1))
-
-    errorIndication, errorStatus, errorIndex, ipsecGlobalInOctets = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 3))
-
-    errorIndication, errorStatus, errorIndex, ipsecGlobalInDrops = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 10))
-
-    errorIndication, errorStatus, errorIndex, ipsecGlobalInAuthFails = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 13))
-
-    errorIndication, errorStatus, errorIndex, ipsecGlobalOutOctets = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 16))
-
-    errorIndication, errorStatus, errorIndex, ipsecGlobalOutDrops = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 23))
-
-    errorIndication, errorStatus, errorIndex, ipsecGlobalOutAuthFails = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 25))
-
-    errorIndication, errorStatus, errorIndex, connActive = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 6))
-
-    errorIndication, errorStatus, errorIndex, connRate1m = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 10))
-
-    errorIndication, errorStatus, errorIndex, connRate5m = cmdgen.CommandGenerator().nextCmd(
-            cmdgen.CommunityData('agent', options.community, 0),
-            cmdgen.UdpTransportTarget((target_host, options.snmpport)),
-            (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 11))
+        for i in range(0, len(snmpDataInt)):    # Interfaces data loop
+            for k in range(1, len(snmpDescInt)-1):
+                data.append(("%s.%s.%s_%s" % (
+                    options.custom_group_name,
+                    hostname,
+                    str(snmpDataInt[i][0][1]).replace('/', '_'),    # interface name; change / into _ to help grahite tree organisation
+                    snmpDescInt[k]),
+                    (
+                        timestamp,
+                        int(snmpDataInt[i][k][1])  # value
+                    )))
+            if (oldOctetsIn[i] > 0 and oldOctetsOut[i] > 0 and 
+                int(snmpDataInt[i][1][1]) >= oldOctetsIn[i] and 
+                int(snmpDataInt[i][2][1]) >= oldOctetsOut[i]):
+                bwIn = ((int(snmpDataInt[i][1][1])-oldOctetsIn[i])*8)/options.delay   # Calculate input bandwith usage in bit/s
+                bwOut = ((int(snmpDataInt[i][2][1])-oldOctetsOut[i])*8)/options.delay # Calculate output bandwith usage in bit/s
+                data.append(("%s.%s.%s_%s" % (
+                    options.custom_group_name,
+                    hostname,
+                    str(snmpDataInt[i][0][1]).replace('/', '_'),
+                    'bandwidth_usage_in'),
+                    (
+                        timestamp,
+                        int(bwIn)  # value
+                    )))
+                data.append(("%s.%s.%s_%s" % (
+                    options.custom_group_name,
+                    hostname,
+                    str(snmpDataInt[i][0][1]).replace('/', '_'),
+                    'bandwidth_usage_out'),
+                    (
+                        timestamp,
+                        int(bwOut)  # value
+                    )))
+            oldOctetsIn[i] = int(snmpDataInt[i][1][1])
+            oldOctetsOut[i] = int(snmpDataInt[i][2][1]) 
             
-    if options.custom_host_name:
-      hostname = options.custom_host_name
-    else:
-      hostname = re.search(r'^([a-zA-Z0-9-]+).*', str(sysName[0][0][1])).group(1)  # assigns and strips out the hostname
+        for i in range(0, len(snmpDataConn[0])):    # Conn data loop
+            data.append(("%s.%s.%s" % (
+                options.custom_group_name,
+                hostname,
+                snmpDescConn[i]),
+                (
+                    timestamp,
+                    int(snmpDataConn[0][i][1])  # value
+                )))
 
-    # assumes all the results from SNMP are in right (the same) order
-    interfaces = zip(ifIndex, ifDescr, ifInOctets, ifOutOctets, ifInDiscarded, ifOutDiscarded, ifInError, ifOutError)
+        for i in range(1, len(snmpData[0])-1):    # Main data loop
+            data.append(("%s.%s.%s" % (
+                options.custom_group_name,
+                hostname,
+                snmpDesc[i]),
+                (
+                    timestamp,
+                    int(snmpData[0][i][1])  # value
+                )))
 
-    for row in interfaces:
-        data.append(("%s.%s.%s_traffic_in" % (
-            options.custom_group_name,
-            hostname,
-            str(row[1][0][1]).replace('/', '_')),  # interface name; change / into _ to help grahite tree organisation
-            (
-                timestamp,
-                int(row[2][0][1])  # traffic IN
-            )))
-        data.append(("%s.%s.%s_traffic_out" % (
-            options.custom_group_name,
-            hostname,
-            str(row[1][0][1]).replace('/', '_')),
-            (
-                timestamp,
-                int(row[3][0][1])  # traffic OUT
-            )))
-        data.append(("%s.%s.%s_discarded_in" % (
-            options.custom_group_name,
-            hostname,
-            str(row[1][0][1]).replace('/', '_')),
-            (
-                timestamp,
-                int(row[4][0][1])  # discarded IN
-            )))
-        data.append(("%s.%s.%s_discarded_out" % (
-            options.custom_group_name,
-            hostname,
-            str(row[1][0][1]).replace('/', '_')),
-            (
-                timestamp,
-                int(row[5][0][1])  # discarded OUT
-            )))
-        data.append(("%s.%s.%s_errors_in" % (
-            options.custom_group_name,
-            hostname,
-            str(row[1][0][1]).replace('/', '_')),
-            (
-                timestamp,
-                int(row[6][0][1])  # errors IN
-            )))
-        data.append(("%s.%s.%s_errors_out" % (
-            options.custom_group_name,
-            hostname,
-            str(row[1][0][1]).replace('/', '_')),
-            (
-                timestamp,
-                int(row[7][0][1])  # errors OUT
-            )))
+        if not (options.debug):
+            # send gathered data to carbon server as a pickle packet
+            payload = pickle.dumps(data)
+            header = struct.pack("!L", len(payload))
+            message = header + payload
+            sock.sendall(message)
+        else:
+            pprint.pprint(data)
 
-    # cpu usage
-    data.append(("%s.%s.cpu_total_1min" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(cpmCPUTotal1min[0][0][1])  # cpmCPUTotal1min
-        )))
-
-    # ram used
-    data.append(("%s.%s.ram_used" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ramUsed[0][0][1])  # ramUsed
-        )))
-
-    # ram free
-    data.append(("%s.%s.ram_free" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ramFree[0][0][1])  # ramFree
-        )))
-
-    # snmp in
-    data.append(("%s.%s.snmp_traffic_in" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(snmpInOctets[0][0][1])  # snmpInOctets
-        )))
-
-    # snmp out
-    data.append(("%s.%s.snmp_traffic_out" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(snmpOutOctets[0][0][1])  # snmpOutOctets
-        )))
-
-    # snmp bad version
-    data.append(("%s.%s.snmp_bad_version" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(snmpBadVersion[0][0][1])  # snmpBadVersion
-        )))
-
-    # snmp community name
-    data.append(("%s.%s.snmp_bad_community_name" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(snmpBadCommunityName[0][0][1])  # snmpBadCommunityName
-        )))
-
-    # snmp community use
-    data.append(("%s.%s.snmp_bad_community_use" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(snmpBadCommunityUse[0][0][1])  # snmpBadCommunityUse
-        )))
-
-    # ike active tunnels
-    data.append(("%s.%s.ike_active_tunnels" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ikeActiveTunnels[0][0][1])  # ikeActiveTunnels
-        )))
-
-    # ike global in octets
-    data.append(("%s.%s.ike_global_traffic_in" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ikeGlobalInOctets[0][0][1])  # ikeGlobalInOctets
-        )))
-
-    # ike global in drops
-    data.append(("%s.%s.ike_global_drops_in" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ikeGlobalInDrops[0][0][1])  # ikeGlobalInDrops
-        )))
-
-    # ike global out octets
-    data.append(("%s.%s.ike_global_traffic_out" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ikeGlobalOutOctets[0][0][1])  # ikeGlobalOutOctets
-        )))
-
-    # ike global out drops
-    data.append(("%s.%s.ike_global_drops_out" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ikeGlobalOutDrops[0][0][1])  # ikeGlobalOutDrops
-        )))
-
-    # ike global auth fails
-    data.append(("%s.%s.ike_global_auth_fails" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ikeGlobalAuthFails[0][0][1])  # ikeGlobalAuthFails
-        )))
-
-    # ipsec active tunnels
-    data.append(("%s.%s.ipsec_active_tunnels" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ipsecActiveTunnels[0][0][1])  # ipsecActiveTunnels
-        )))
-
-    # ipsec global in octets
-    data.append(("%s.%s.ipsec_global_traffic_in" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ipsecGlobalInOctets[0][0][1])  # ipsecGlobalInOctets
-        )))
-
-    # ipsec global in drops
-    data.append(("%s.%s.ipsec_global_drops_in" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ipsecGlobalInDrops[0][0][1])  # ipsecGlobalInDrops
-        )))
-
-    # ipsec global in auth fails
-    data.append(("%s.%s.ipsec_global_auth_fails_in" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ipsecGlobalInAuthFails[0][0][1])  # ipsecGlobalInAuthFails
-        )))
-
-    # ipsec global out octets
-    data.append(("%s.%s.ipsec_global_traffic_out" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ipsecGlobalOutOctets[0][0][1])  # ipsecGlobalOutOctets
-        )))
-
-    # ipsec global out drops
-    data.append(("%s.%s.ipsec_global_drops_in" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ipsecGlobalOutDrops[0][0][1])  # ipsecGlobalOutDrops
-        )))
-
-    # ipsec global out auth fails
-    data.append(("%s.%s.ipsec_global_auth_fails_out" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(ipsecGlobalOutAuthFails[0][0][1])  # ipsecGlobalOutAuthFails
-        )))
-
-    # conn active
-    data.append(("%s.%s.conn_active" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(connActive[0][0][1])  # connActive
-        )))
-
-    # conn rate 1min
-    data.append(("%s.%s.conn_rate_1min" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(connRate1m[0][0][1])  # connRate1m
-        )))
-
-    # conn rate 5min
-    data.append(("%s.%s.conn_rate_5min" % (
-        options.custom_group_name,
-        hostname),
-        (
-            timestamp,
-            int(connRate5m[0][0][1])  # connRate5m
-        )))
-
-    # send gathered data to carbon server as a pickle packet
-    payload = pickle.dumps(data)
-    header = struct.pack("!L", len(payload))
-    message = header + payload
-
-    sock.sendall(message)
-    sock.close()
+        sock.close()
+        
+        if (options.single):
+            break
+        
+        time.sleep(options.delay)
 
 if __name__ == '__main__':
     main()
