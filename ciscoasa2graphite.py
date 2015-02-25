@@ -128,10 +128,10 @@ def main():
 
         if errorIndication:
             print(errorIndication)
-            break
+            continue
         elif errorStatus:
             print(errorStatus)
-            break
+            continue
 
         errorIndication, errorStatus, errorIndex, snmpDataConn = cmdgen.CommandGenerator().nextCmd(
                 cmdgen.CommunityData('agent', options.community, 0),
@@ -143,10 +143,10 @@ def main():
 
         if errorIndication:
             print(errorIndication)
-            break
+            continue
         elif errorStatus:
             print(errorStatus)
-            break
+            continue
 
         errorIndication, errorStatus, errorIndex, snmpData = cmdgen.CommandGenerator().nextCmd(
                 cmdgen.CommunityData('agent', options.community, 0),
@@ -177,10 +177,10 @@ def main():
 
         if errorIndication:
             print(errorIndication)
-            break
+            continue
         elif errorStatus:
             print(errorStatus)
-            break
+            continue
 
         if options.custom_host_name:
           hostname = options.custom_host_name
