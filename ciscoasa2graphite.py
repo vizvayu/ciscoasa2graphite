@@ -126,6 +126,13 @@ def main():
                 (1, 3, 6, 1, 2, 1, 2, 2, 1, 20),                # 6 ifOutError
             )
 
+        if errorIndication:
+            print(errorIndication)
+            break
+        elif errorStatus:
+            print(errorStatus)
+            break
+
         errorIndication, errorStatus, errorIndex, snmpDataConn = cmdgen.CommandGenerator().nextCmd(
                 cmdgen.CommunityData('agent', options.community, 0),
                 cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=3),
@@ -133,6 +140,13 @@ def main():
                 (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 10),     # 1 connRate1m
                 (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 11),     # 2 connRate5m
             )
+
+        if errorIndication:
+            print(errorIndication)
+            break
+        elif errorStatus:
+            print(errorStatus)
+            break
 
         errorIndication, errorStatus, errorIndex, snmpData = cmdgen.CommandGenerator().nextCmd(
                 cmdgen.CommunityData('agent', options.community, 0),
@@ -160,6 +174,13 @@ def main():
                 (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 23),     # 20 ipsecGlobalOutDrops
                 (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 25),     # 21 ipsecGlobalOutAuthFails
             )
+
+        if errorIndication:
+            print(errorIndication)
+            break
+        elif errorStatus:
+            print(errorStatus)
+            break
 
         if options.custom_host_name:
           hostname = options.custom_host_name
