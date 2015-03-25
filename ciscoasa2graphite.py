@@ -59,6 +59,9 @@ def main():
 
     oldOctetsIn = [0 for i in range(30)]
     oldOctetsOut = [0 for i in range(30)]
+
+    snmpTimeout = 10
+    errorDelay = 60
     
     while True:
         # try to establish connection with carbon server
@@ -116,7 +119,7 @@ def main():
 
         errorIndication, errorStatus, errorIndex, snmpDataInt = cmdgen.CommandGenerator().nextCmd(
                 cmdgen.CommunityData('agent', options.community, 0),
-                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=3),
+                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=snmpTimeout),
                 (1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 1),             # 0 ifDescr
                 (1, 3, 6, 1, 2, 1, 2, 2, 1, 10),                # 1 ifInOctets
                 (1, 3, 6, 1, 2, 1, 2, 2, 1, 16),                # 2 ifOutOctets
@@ -127,30 +130,34 @@ def main():
             )
 
         if errorIndication:
-            print(errorIndication)
+            print("ErrorIndication 1: %s" % errorIndication)
+            time.sleep(errorDelay)
             continue
         elif errorStatus:
-            print(errorStatus)
+            print("ErrorStatus 1: %s" % errorStatus)
+            time.sleep(errorDelay)
             continue
 
         errorIndication, errorStatus, errorIndex, snmpDataConn = cmdgen.CommandGenerator().nextCmd(
                 cmdgen.CommunityData('agent', options.community, 0),
-                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=3),
+                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=snmpTimeout),
                 (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 6),      # 0 connActive
                 (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 10),     # 1 connRate1m
                 (1, 3, 6, 1, 4, 1, 9, 9, 491, 1, 1, 1, 11),     # 2 connRate5m
             )
 
         if errorIndication:
-            print(errorIndication)
+            print("ErrorIndication 2: %s" % errorIndication)
+            time.sleep(errorDelay)
             continue
         elif errorStatus:
-            print(errorStatus)
+            print("ErrorStatus 2: %s" % errorStatus)
+            time.sleep(errorDelay)
             continue
 
         errorIndication, errorStatus, errorIndex, snmpData = cmdgen.CommandGenerator().nextCmd(
                 cmdgen.CommunityData('agent', options.community, 0),
-                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=3),
+                cmdgen.UdpTransportTarget((target_host, options.snmpport), timeout=snmpTimeout),
                 (1, 3, 6, 1, 2, 1, 1, 5),                       # 0 sysName
                 (1, 3, 6, 1, 4, 1, 9, 9, 109, 1, 1, 1, 1, 4),   # 1 cpmCPUTotal1min
                 (1, 3, 6, 1, 4, 1, 9, 9, 48, 1, 1, 1, 5),       # 2 ramUsed
@@ -172,14 +179,15 @@ def main():
                 (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 13),     # 18 ipsecGlobalInAuthFails
                 (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 16),     # 19 ipsecGlobalOutOctets
                 (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 23),     # 20 ipsecGlobalOutDrops
-                (1, 3, 6, 1, 4, 1, 9, 9, 171, 1, 3, 1, 25),     # 21 ipsecGlobalOutAuthFails
             )
 
         if errorIndication:
-            print(errorIndication)
+            print("ErrorIndication 3: %s" % errorIndication)
+            time.sleep(errorDelay)
             continue
         elif errorStatus:
-            print(errorStatus)
+            print("ErrorStatus 3: %s" % errorStatus)
+            time.sleep(errorDelay)
             continue
 
         if options.custom_host_name:
@@ -262,3 +270,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
