@@ -229,6 +229,15 @@ def main():
                         timestamp,
                         int(bwOut)  # value
                     )))
+                data.append(("%s.%s.%s_%s" % (
+                    options.custom_group_name,
+                    hostname,
+                    str(snmpDataInt[i][0][1]).replace('/', '_'),
+                    'bandwidth_usage_total'),
+                    (
+                        timestamp,
+                        int(bwIn)+int(bwOut)  # value
+                    )))
             oldOctetsIn[i] = int(snmpDataInt[i][1][1])
             oldOctetsOut[i] = int(snmpDataInt[i][2][1]) 
             
